@@ -1,0 +1,80 @@
+---
+title: "Lab-D-Replication"
+author: "Christopher Prener, Ph.D."
+date: '(`r format(Sys.time(), "%B %d, %Y")`)'
+output: 
+  github_document: default
+  html_notebook: default 
+---
+
+## Introduction
+This notebook replicates the Lab-D assignment, which geocodes the locations of chain grocery stores in St. Louis City and County.
+
+## Dependencies
+This notebook requires the following packages:
+
+```{r load-packages}
+# tidyverse packages
+library(dplyr)       # data wrangling
+library(readr)       # read csv files
+library(stringr)     # data wrangling for strings
+library(tidyr)       # data wrangling for tables
+
+# spatial packages
+library(censusxy)    # geocoding
+library(mapview)     # preview spatial data
+library(sf)          # spatial tools
+
+# other packages
+library(here)        # file path management
+```
+
+## Load Data
+This notebook requires raw data on grocery store locations:
+
+```{r load-data}
+grocery <- read_csv(here("data", "STL_RETAIL_Grocery.csv"))
+```
+
+## Part 1
+### Question 1
+First, we need to pre-process our data and parse the address colum by:
+
+  1. Parsing the zip code into its own column, **then**
+  2. deleting the zip code from the `address` column, **then**
+  3. removing trailing spaces, **then**
+  4. parsing the remaining address data.
+
+```{r p1-q1}
+grocery %>%
+  mutate(zip = word(address, -1)) %>% # extract zip code
+  mutate(address = str_replace(string = address, pattern = zip, replacement = "")) %>% # delete zip code in address
+  mutate(address = str_squish(address)) %>% # remove trailing space
+  separate(col = "address", into = c("street", "city", "state"), sep = ",") -> grocery # parse
+```
+
+We now have data that can be geocoded!
+
+### Question 2
+Now, we'll geocode our address data:
+
+```{r p1-q2}
+grocery_geocode <- cxy_geocode(grocery, id = "id", street = "street", city = "city", state = "state", zip = "zip")
+```
+
+Notice that we have a lot of `NA` values - this is far less than ideal. Geocoding often takes extensive work to prep and clean our data. 
+
+### Question 3
+Finally, we'll project them using NAD 1983:
+
+```{r p1-q3-project}
+grocery_geocode %>%
+  filter(is.na(cxy_lon) == FALSE) %>%
+  st_as_sf(coords = c("cxy_lon", "cxy_lat"), crs = 4269) -> grocery_sf
+```
+
+We can preview our data that we could geocode with `mapview`:
+
+```{r p1-q3-explore}
+mapview(grocery_sf, zcol = "title")
+```
